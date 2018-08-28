@@ -549,11 +549,8 @@ def _setup_logging():
         except Exception as e:
             exit('Unable to initialize logging system - ' + str(e) + '.')
     else:
-        logging.disable(logging.CRITICAL)
-        logging.disable(logging.ERROR)
-        logging.disable(logging.WARNING)
-        logging.disable(logging.INFO)
-        logging.disable(logging.DEBUG)
+        logger = logging.getLogger()
+        logger.disabled = True
 
         
 def _step(instring, color=C_BLUE):
