@@ -1,0 +1,86 @@
+# Examaple mkconf Template Configuration YAML file.
+# -------------------------------------------------
+
+# ----- Automatically Provided Variables -----
+# The mkconf utility automatically supplies the following addiitonal template
+# variables:
+
+# fqdn     : The FQDN of the machine running mkconf.
+# hostname : The hostname of the machine running mkconf (without FQDN).
+
+# --------------------------------------------
+
+
+
+# ----- Output Files -----
+# The following (required) variable defines the list of configuration templates to
+# translate and save to the output directory. Basic globbing is also supported.
+# Note that this list DOES NOT contain the virtual host configuration files.
+templates:
+  - "conf/*.conf"
+# ------------------------
+
+
+
+# ----- Global Template Variables -----
+# Specifies the email address to which the "ServerAdmin" directive is set.
+admin_email: "webmaster@example.com"
+
+# The base directory of the resulting AWS configuration. This value is used in
+# templating the "PidFile" and "ServerRoot" directives.
+config_dir: "/etc/httpd"
+
+# The location of the various site logs.
+logs_dir: "/www/logs"
+
+# Base directory containing the various sites hosted from the target server.
+# This value is used in templating the "DocumentRoot" directive.
+sites_dir: "/www/sites"
+# -------------------------------------
+
+
+
+# ----- Virtual Hosts Configuration -----
+# Virtual hosts (required) are specified as a list of dictionaries.
+virtual_hosts:
+  # ----- Development Foo Cloud -----
+    # Specifies the name of the template file within "vhosts.d" this
+    # section pertains to (required).
+  - file: "foo.conf"
+    # Specifies the "base" domain of this particular virtual host.
+    root_domain: "devel.example.com"
+    # Specifies the primary subdomain relative to the "root_domain". The
+    # "ServerName" directive in the resulting configuration file will be set to
+    # the concatination between this value and the "root_domain".
+    primary_subdomain: "www"
+    # Specifies additional subdomains governed by this particular virtual host
+    # configuration file. Like the "primary_subdomain", these are relative to
+    # the "root_domain". The resulting configuration file will contain multiple
+    # "ServerAlias" directives for each subdomain.
+    additional_subdomains:
+      - "sub1"
+      - "sub2"
+      - "sub3"
+      - "sub4"
+      
+  # ----- Development Bar Cloud -----
+  - file: "bar.conf"
+    root_domain: "devel.bar.example.com"
+    primary_subdomain: "www"
+    additional_subdomains:
+      - "sub1"
+      - "sub2"
+      - "sub3"
+      - "sub4"
+    # Specifies additional domains governed by this particular virtual host
+    # configuration file which are not subdomains of the specified
+    # "root_domain".
+    alias_domains:
+      - "alternative.devel.example.com"
+      
+  # ----- Development Baz Cloud -----
+  - file: "baz.conf"
+    # If "primary_subdomain" is not defined for a particular virtual host,
+    # then the value of the "ServerName" directive will be set to the value of
+    # "root_domain".
+    root_domain: "baz.devel.example.com"

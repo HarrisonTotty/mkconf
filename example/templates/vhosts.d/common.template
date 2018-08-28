@@ -1,0 +1,38 @@
+{#
+    The following file contains a common virtual host configuration which is
+    imported by the other configuration files in this directory.
+#}
+{{
+    require('logs_dir')
+}}
+# Directory from which to serve files.
+DocumentRoot {{ path_join(sites_dir, primary_domain, 'htdocs') }}
+
+# Primary domain name.
+ServerName {{ primary_domain }}
+
+{% if vhost.additional_subdomains is defined %}
+# Additional subdomains mapped to this virtual host.
+{% for subdomain in vhost.additional_subdomains %}
+ServerAlias {{ domain_join(subdomain, vhost.root_domain) }}
+{% endfor %}
+{% endif %}
+
+{% if vhost.alias_domains is defined %}
+# Additional domains mapped to this virtual host.
+{% for aliasdomain in vhost.alias_domains %}
+ServerAlias {{ aliasdomain }}
+{% endfor %}
+{% endif %}
+
+# Logging configuration
+LogFormat "%a %h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-agent}i\" \"%{Cookie}n\" \"%{X-Forwarded-For}i\" \"%{X-Forwarded-Proto}i\""
+TransferLog {{ path_join(logs_dir, primary_domain, 'access') }}
+ErrorLog {{ path_join(logs_dir, primary_domain, 'errors') }}
+
+# Custom error pages.
+ErrorDocument 503 /503.html
+ErrorDocument 502 /500.html
+ErrorDocument 404 /404.html
+
+# More stuff........
