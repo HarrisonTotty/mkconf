@@ -54,7 +54,7 @@ The following table describes the remaining optional arguments:
 | `--dont-trim-jinja-blocks`           |                                              |                  | Specifies that the first newline character after a Jinja block should NOT be removed.                                                                                       |
 | `-d`, `--dry-run`                    |                                              |                  | Specifies that the script should only execute a dry-run, preventing the generated configuration files from being copied from the working directory to the output directory. |
 | `-e`, `--email-level`                | `never`, `error`, `warning`, or `completion` | `never`          | Specifies the condition at which the script should send an email.                                                                                                           |
-| `--email-to`                         | Email Address                                |                  | Specifies the email address to recieve sent emails. This option is ignored if `-e` is not specified or set to `never`.                                                      |
+| `--email-to`                         | Email Address                                |                  | Specifies the email address to receive sent emails. This option is ignored if `-e` is not specified or set to `never`.                                                      |
 | `-h`, `--help`                       |                                              |                  | Displays help and usage information.                                                                                                                                        |
 | `-i`, `--ignore-validation-warnings` |                                              |                  | Disables printing/logging of warning-level issues during the generated configuration validation process.                                                                    |
 | `-f`, `--log-file`                   | File Path                                    |                  | Specifies a log file to write to in addition to stdout/stderr.                                                                                                              |
@@ -104,35 +104,35 @@ $ ./mkconf example/mkconf.yaml example/templates -f tst.log --no-color -m overwr
 :: Validating generated configuration files...
   --> conf/modules.conf
   --> conf/httpd.conf
-      Warning: DocumentRoot directive specifies potentially non-existant directory "/www/sites/harrisontlxlap.localdomain/htdocs".
-      Warning: ErrorLog directive specifies potentially non-existant parent directory "/www/logs/harrisontlxlap.localdomain".
-      Warning: PidFile directive specifies potentially non-existant parent directory "/etc/httpd/run".
-      Warning: ServerRoot directive specifies potentially non-existant directory "/etc/httpd".
+      Warning: DocumentRoot directive specifies potentially non-existent directory "/www/sites/harrisontlxlap.localdomain/htdocs".
+      Warning: ErrorLog directive specifies potentially non-existent parent directory "/www/logs/harrisontlxlap.localdomain".
+      Warning: PidFile directive specifies potentially non-existent parent directory "/etc/httpd/run".
+      Warning: ServerRoot directive specifies potentially non-existent directory "/etc/httpd".
   --> conf/filemaps.conf
   --> vhosts.d/foo.conf
-      Warning: DocumentRoot directive specifies potentially non-existant directory "/www/sites/www.devel.example.com/htdocs".
+      Warning: DocumentRoot directive specifies potentially non-existent directory "/www/sites/www.devel.example.com/htdocs".
       Warning: ServerName directive specification "www.devel.example.com" does not resolve in DNS.
       Warning: ServerAlias directive specification "sub1.devel.example.com" does not resolve in DNS.
       Warning: ServerAlias directive specification "sub2.devel.example.com" does not resolve in DNS.
       Warning: ServerAlias directive specification "sub3.devel.example.com" does not resolve in DNS.
       Warning: ServerAlias directive specification "sub4.devel.example.com" does not resolve in DNS.
-      Warning: TransferLog directive specifies potentially non-existant parent directory "/www/logs/www.devel.example.com".
-      Warning: ErrorLog directive specifies potentially non-existant parent directory "/www/logs/www.devel.example.com".
+      Warning: TransferLog directive specifies potentially non-existent parent directory "/www/logs/www.devel.example.com".
+      Warning: ErrorLog directive specifies potentially non-existent parent directory "/www/logs/www.devel.example.com".
   --> vhosts.d/bar.conf
-      Warning: DocumentRoot directive specifies potentially non-existant directory "/www/sites/www.devel.bar.example.com/htdocs".
+      Warning: DocumentRoot directive specifies potentially non-existent directory "/www/sites/www.devel.bar.example.com/htdocs".
       Warning: ServerName directive specification "www.devel.bar.example.com" does not resolve in DNS.
       Warning: ServerAlias directive specification "sub1.devel.bar.example.com" does not resolve in DNS.
       Warning: ServerAlias directive specification "sub2.devel.bar.example.com" does not resolve in DNS.
       Warning: ServerAlias directive specification "sub3.devel.bar.example.com" does not resolve in DNS.
       Warning: ServerAlias directive specification "sub4.devel.bar.example.com" does not resolve in DNS.
       Warning: ServerAlias directive specification "alternative.devel.example.com" does not resolve in DNS.
-      Warning: TransferLog directive specifies potentially non-existant parent directory "/www/logs/www.devel.bar.example.com".
-      Warning: ErrorLog directive specifies potentially non-existant parent directory "/www/logs/www.devel.bar.example.com".
+      Warning: TransferLog directive specifies potentially non-existent parent directory "/www/logs/www.devel.bar.example.com".
+      Warning: ErrorLog directive specifies potentially non-existent parent directory "/www/logs/www.devel.bar.example.com".
   --> vhosts.d/baz.conf
-      Warning: DocumentRoot directive specifies potentially non-existant directory "/www/sites/baz.devel.example.com/htdocs".
+      Warning: DocumentRoot directive specifies potentially non-existent directory "/www/sites/baz.devel.example.com/htdocs".
       Warning: ServerName directive specification "baz.devel.example.com" does not resolve in DNS.
-      Warning: TransferLog directive specifies potentially non-existant parent directory "/www/logs/baz.devel.example.com".
-      Warning: ErrorLog directive specifies potentially non-existant parent directory "/www/logs/baz.devel.example.com".
+      Warning: TransferLog directive specifies potentially non-existent parent directory "/www/logs/baz.devel.example.com".
+      Warning: ErrorLog directive specifies potentially non-existent parent directory "/www/logs/baz.devel.example.com".
 :: Finalizing configuration process...
   --> Writing configuration files to output directory...
 ```
@@ -156,13 +156,13 @@ The corresponding log file for the above run looks like this:
 [INF] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] Validating generated configuration files...
 [INF] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] Validating "conf/modules.conf"...
 [INF] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] Validating "conf/httpd.conf"...
-[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] DocumentRoot directive specifies potentially non-existant directory "/www/sites/harrisontlxlap.localdomain/htdocs".
-[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] ErrorLog directive specifies potentially non-existant parent directory "/www/logs/harrisontlxlap.localdomain".
-[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] PidFile directive specifies potentially non-existant parent directory "/etc/httpd/run".
-[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] ServerRoot directive specifies potentially non-existant directory "/etc/httpd".
+[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] DocumentRoot directive specifies potentially non-existent directory "/www/sites/harrisontlxlap.localdomain/htdocs".
+[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] ErrorLog directive specifies potentially non-existent parent directory "/www/logs/harrisontlxlap.localdomain".
+[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] PidFile directive specifies potentially non-existent parent directory "/etc/httpd/run".
+[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] ServerRoot directive specifies potentially non-existent directory "/etc/httpd".
 [INF] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] Validating "conf/filemaps.conf"...
 [INF] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] Validating "vhosts.d/foo.conf"...
-[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] DocumentRoot directive specifies potentially non-existant directory "/www/sites/www.devel.example.com/htdocs".
+[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] DocumentRoot directive specifies potentially non-existent directory "/www/sites/www.devel.example.com/htdocs".
 [WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] ServerName directive specification "www.devel.example.com" does not resolve in DNS.
 [WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] Relevant ServerName resolution exception: [Errno -2] Name or service not known
 [WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] ServerAlias directive specification "sub1.devel.example.com" does not resolve in DNS.
@@ -173,10 +173,10 @@ The corresponding log file for the above run looks like this:
 [WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] Relevant ServerAlias resolution exception: [Errno -2] Name or service not known
 [WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] ServerAlias directive specification "sub4.devel.example.com" does not resolve in DNS.
 [WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] Relevant ServerAlias resolution exception: [Errno -2] Name or service not known
-[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] TransferLog directive specifies potentially non-existant parent directory "/www/logs/www.devel.example.com".
-[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] ErrorLog directive specifies potentially non-existant parent directory "/www/logs/www.devel.example.com".
+[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] TransferLog directive specifies potentially non-existent parent directory "/www/logs/www.devel.example.com".
+[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] ErrorLog directive specifies potentially non-existent parent directory "/www/logs/www.devel.example.com".
 [INF] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] Validating "vhosts.d/bar.conf"...
-[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] DocumentRoot directive specifies potentially non-existant directory "/www/sites/www.devel.bar.example.com/htdocs".
+[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] DocumentRoot directive specifies potentially non-existent directory "/www/sites/www.devel.bar.example.com/htdocs".
 [WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] ServerName directive specification "www.devel.bar.example.com" does not resolve in DNS.
 [WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] Relevant ServerName resolution exception: [Errno -2] Name or service not known
 [WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] ServerAlias directive specification "sub1.devel.bar.example.com" does not resolve in DNS.
@@ -189,14 +189,14 @@ The corresponding log file for the above run looks like this:
 [WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] Relevant ServerAlias resolution exception: [Errno -2] Name or service not known
 [WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] ServerAlias directive specification "alternative.devel.example.com" does not resolve in DNS.
 [WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] Relevant ServerAlias resolution exception: [Errno -2] Name or service not known
-[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] TransferLog directive specifies potentially non-existant parent directory "/www/logs/www.devel.bar.example.com".
-[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] ErrorLog directive specifies potentially non-existant parent directory "/www/logs/www.devel.bar.example.com".
+[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] TransferLog directive specifies potentially non-existent parent directory "/www/logs/www.devel.bar.example.com".
+[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] ErrorLog directive specifies potentially non-existent parent directory "/www/logs/www.devel.bar.example.com".
 [INF] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] Validating "vhosts.d/baz.conf"...
-[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] DocumentRoot directive specifies potentially non-existant directory "/www/sites/baz.devel.example.com/htdocs".
+[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] DocumentRoot directive specifies potentially non-existent directory "/www/sites/baz.devel.example.com/htdocs".
 [WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] ServerName directive specification "baz.devel.example.com" does not resolve in DNS.
 [WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] Relevant ServerName resolution exception: [Errno -2] Name or service not known
-[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] TransferLog directive specifies potentially non-existant parent directory "/www/logs/baz.devel.example.com".
-[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] ErrorLog directive specifies potentially non-existant parent directory "/www/logs/baz.devel.example.com".
+[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] TransferLog directive specifies potentially non-existent parent directory "/www/logs/baz.devel.example.com".
+[WAR] [08/28/2018 10:31:56 AM] [16800] [mkconf.validate_configs] ErrorLog directive specifies potentially non-existent parent directory "/www/logs/baz.devel.example.com".
 [INF] [08/28/2018 10:31:56 AM] [16800] [mkconf.write_output] Finalizing configuration process...
 [INF] [08/28/2018 10:31:56 AM] [16800] [mkconf.write_output] Writing configuration files to output directory...
 [INF] [08/28/2018 10:31:56 AM] [16800] [mkconf.main] Configuration process complete.
@@ -286,7 +286,7 @@ Note that each of the above functions will _only work_ in a Jinja _variable spec
 
 ## Template Configuration File
 
-The template configuration file (`example/mkconf.yaml`) is a YAML file which contains the global variables accessable to the various configuration templates. In addition to being utilized by the Jinja templates themseleves, `mkconf` also directly acts on certain required variables within the file. The current required variables are the `templates` variable and the `virtual_hosts` variable.
+The template configuration file (`example/mkconf.yaml`) is a YAML file which contains the global variables accessible to the various configuration templates. In addition to being utilized by the Jinja templates themseleves, `mkconf` also directly acts on certain required variables within the file. The current required variables are the `templates` variable and the `virtual_hosts` variable.
 
 The `templates` variable defines a list of "basic" configuration files within the template directory to be translated and written to the output directory. These configuration files are specified with paths relative to the specified template directory. Note that this list _does not_ include the list of virtual host templates to include (see `virtual_hosts`). An example `templates` specification is given below:
 
@@ -301,7 +301,7 @@ templates:
     - "wamzo.conf"
 ```
 
-The `virtual_hosts` variable defines a list of dictionaries specifiying virtual host configuration files to include in the output directory, relative to the `vhosts.d` subdirectory of the specified configuration template directory as the value of the `file` key. Additional variables that are specific to each virtual host should also be specified here. In the example included within this repo, each virtual host specification includes the relevant root domain, primary subdomain, additional subdomains, and any additional alias domains. `mkconf` automatically sets the value of `vhost` to the relevant entry in `virtual_hosts` so that one may simply refer to variables specific to that virtual host via `vhost.foo` or `vhost['foo']`. Below is an example specification:
+The `virtual_hosts` variable defines a list of dictionaries specifying virtual host configuration files to include in the output directory, relative to the `vhosts.d` subdirectory of the specified configuration template directory as the value of the `file` key. Additional variables that are specific to each virtual host should also be specified here. In the example included within this repo, each virtual host specification includes the relevant root domain, primary subdomain, additional subdomains, and any additional alias domains. `mkconf` automatically sets the value of `vhost` to the relevant entry in `virtual_hosts` so that one may simply refer to variables specific to that virtual host via `vhost.foo` or `vhost['foo']`. Below is an example specification:
 
 ```
 virtual_hosts:
@@ -352,7 +352,7 @@ After the templates have been translated into the specified working directory, e
 * That "group directives" (`<foo bar>`) are followed by a corresponding closing statement (`</foo>`).
 * That _absolute-path_ `DocumentRoot` directives point to an existing directory. Note that `mkconf` currently will not validate _relative-path_ `DocumentRoot` directives.
 * That _absolute-path_ `ErrorLog` directives point to a location with an existing parent directory. Note that `mkconf` currently will not validate _relative-path_ `ErrorLog` directives.
-* That _absolute-path_ `Include` directives point to an existing location relative to the _current_ or _future_ filesystem layout. In otherwords, some logic is used to discern if any configuration files in current working directory will end-up with an absolute path that matches the one specified by the include. Of course, it will also check to see if the specified file already exists there.
+* That _absolute-path_ `Include` directives point to an existing location relative to the _current_ or _future_ filesystem layout. In other words, some logic is used to discern if any configuration files in current working directory will end-up with an absolute path that matches the one specified by the include. Of course, it will also check to see if the specified file already exists there.
 * That _relative-path_ `Include` directives point to an existing location relative to the current working directory. Note that although `Include` directives support wildcarded paths, `mkconf` currently will not validate these wildcards.
 * That _absolute-path_ `PidFile` directives point to a location with an existing parent directory. Note that `mkconf` currently will not validate _relative-path_ `PidFile` directives.
 * That `ServerName` and `ServerAlias` directives have a valid host string and resolve in DNS.

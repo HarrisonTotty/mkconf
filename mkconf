@@ -61,7 +61,7 @@ MKCONF_WORKING_DIR        :  --working-directory
 ------------ Examples -----------
 
 $ mkconf example/mkconf.yaml example/templates -o example/out
-    Generates a new set of Apache Web Server confiuguration files into the
+    Generates a new set of Apache Web Server configuration files into the
     "example/out" directory relative to the current working directory.
 
 $ mkconf example/mkconf.yaml example/templates -f /var/log/mkconf.log
@@ -356,7 +356,7 @@ def _parse_arguments():
         '--email-to',
         default = os.getenv('MKCONF_EMAIL_TO', ''),
         dest = 'email_to',
-        help = 'Specifies the email address to recieve sent emails. This option is ignored if "-e" is not specified or set to "never".',
+        help = 'Specifies the email address to receive sent emails. This option is ignored if "-e" is not specified or set to "never".',
         metavar = 'EMAIL'
         )
     argparser.add_argument(
@@ -422,7 +422,7 @@ def _parse_arguments():
         '--rsync-executable',
         default = os.getenv('MKCONF_RSYNC_PATH', '/usr/bin/rsync'),
         dest = 'rsync_executable',
-        help = 'Specifies a file path to the rsync executable utilized for transfering directories. Defaults to "/usr/bin/rsync".',
+        help = 'Specifies a file path to the rsync executable utilized for transferring directories. Defaults to "/usr/bin/rsync".',
         metavar = 'FILE'
         )
     argparser.add_argument(
@@ -1123,8 +1123,8 @@ def validate_configs():
                 if DR.startswith('/'):
                     logging.debug('ABSOLUTE DOCUMENT ROOT: ' + DR)
                     if not os.path.isdir(DR) and not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: DocumentRoot directive specifies potentially non-existant directory "' + DR + '".', C_ORANGE))
-                        logging.warning('DocumentRoot directive specifies potentially non-existant directory "' + DR + '".')
+                        printe(_subsubstep('Warning: DocumentRoot directive specifies potentially non-existent directory "' + DR + '".', C_ORANGE))
+                        logging.warning('DocumentRoot directive specifies potentially non-existent directory "' + DR + '".')
                 else:
                     logging.debug('RELATIVE DOCUMENT ROOT: ' + DR)
                     if not args.ignore_validation_warnings:
@@ -1138,8 +1138,8 @@ def validate_configs():
                     logging.debug('ABSOLUTE ERROR LOG: ' + ERRL)
                     ERRDIR = os.path.dirname(ERRL)
                     if not os.path.isdir(ERRDIR) and not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: ErrorLog directive specifies potentially non-existant parent directory "' + ERRDIR + '".', C_ORANGE))
-                        logging.warning('ErrorLog directive specifies potentially non-existant parent directory "' + ERRDIR + '".')
+                        printe(_subsubstep('Warning: ErrorLog directive specifies potentially non-existent parent directory "' + ERRDIR + '".', C_ORANGE))
+                        logging.warning('ErrorLog directive specifies potentially non-existent parent directory "' + ERRDIR + '".')
                 else:
                     logging.debug('RELATIVE ERROR LOG: ' + ERRL)
                     if not args.ignore_validation_warnings:
@@ -1157,13 +1157,13 @@ def validate_configs():
                         # working directory.
                         if not os.path.isfile(os.path.join(args.working_directory, os.path.relpath(IP, args.output))) and not os.path.isfile(IP):
                             if not args.ignore_validation_warnings:
-                                printe(_subsubstep('Warning: Include directive specifies potentially non-existant file "' + IP + '".', C_ORANGE))
-                                logging.warning('Include directive specifies potentially non-existant file "' + IP + '".')
+                                printe(_subsubstep('Warning: Include directive specifies potentially non-existent file "' + IP + '".', C_ORANGE))
+                                logging.warning('Include directive specifies potentially non-existent file "' + IP + '".')
                     else:
                         logging.debug('RELATIVE INCLUDE: ' + IP)
                         if not os.path.isfile(os.path.join(args.working_directory, IP)) and not args.ignore_validation_warnings:
-                            printe(_subsubstep('Warning: Include directive specifies potentially non-existant file "' + IP + '".', C_ORANGE))
-                            logging.warning('Include directive specifies potentially non-existant file "' + IP + '".')
+                            printe(_subsubstep('Warning: Include directive specifies potentially non-existent file "' + IP + '".', C_ORANGE))
+                            logging.warning('Include directive specifies potentially non-existent file "' + IP + '".')
                 else:
                     logging.debug('WILDCARD INCLUDE: ' + IP)
                     if not args.ignore_validation_warnings:
@@ -1177,8 +1177,8 @@ def validate_configs():
                     logging.debug('ABSOLUTE PID FILE: ' + PID)
                     PIDDIR = os.path.dirname(PID)
                     if not os.path.isdir(PIDDIR) and not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: PidFile directive specifies potentially non-existant parent directory "' + PIDDIR + '".', C_ORANGE))
-                        logging.warning('PidFile directive specifies potentially non-existant parent directory "' + PIDDIR + '".')
+                        printe(_subsubstep('Warning: PidFile directive specifies potentially non-existent parent directory "' + PIDDIR + '".', C_ORANGE))
+                        logging.warning('PidFile directive specifies potentially non-existent parent directory "' + PIDDIR + '".')
                 else:
                     logging.debug('RELATIVE PID FILE: ' + PID)
                     if not args.ignore_validation_warnings:
@@ -1239,8 +1239,8 @@ def validate_configs():
                 if SR.startswith('/'):
                     logging.debug('ABSOLUTE SERVER ROOT: ' + SR)
                     if not os.path.isdir(SR) and not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: ServerRoot directive specifies potentially non-existant directory "' + SR + '".', C_ORANGE))
-                        logging.warning('ServerRoot directive specifies potentially non-existant directory "' + SR + '".')
+                        printe(_subsubstep('Warning: ServerRoot directive specifies potentially non-existent directory "' + SR + '".', C_ORANGE))
+                        logging.warning('ServerRoot directive specifies potentially non-existent directory "' + SR + '".')
                 else:
                     logging.debug('RELATIVE SERVER ROOT: ' + SR)
                     printe(_subsubstep('Error: Found relative-path ServerRoot directive. Relative-path ServerRoot directives are not allowed.', C_RED))
@@ -1258,8 +1258,8 @@ def validate_configs():
                 if CA.startswith('/'):
                     logging.debug('ABSOLUTE SSL CA CERT: ' + CA)
                     if not os.path.isfile(CA) and not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: SSLCACertificateFile directive specifies potentially non-existant file "' + CA + '".', C_ORANGE))
-                        logging.warning('SSLCACertificateFile directive specifies potentially non-existant file "' + CA + '".')
+                        printe(_subsubstep('Warning: SSLCACertificateFile directive specifies potentially non-existent file "' + CA + '".', C_ORANGE))
+                        logging.warning('SSLCACertificateFile directive specifies potentially non-existent file "' + CA + '".')
                 else:
                     logging.debug('RELATIVE SSL CA CERT: ' + CA)
                     if not args.ignore_validation_warnings:
@@ -1272,8 +1272,8 @@ def validate_configs():
                 if CRT.startswith('/'):
                     logging.debug('ABSOLUTE SSL CERT: ' + CRT)
                     if not os.path.isfile(CRT) and not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: SSLCertificateFile directive specifies potentially non-existant file "' + CRT + '".', C_ORANGE))
-                        logging.warning('SSLCertificateFile directive specifies potentially non-existant file "' + CRT + '".')
+                        printe(_subsubstep('Warning: SSLCertificateFile directive specifies potentially non-existent file "' + CRT + '".', C_ORANGE))
+                        logging.warning('SSLCertificateFile directive specifies potentially non-existent file "' + CRT + '".')
                 else:
                     logging.debug('RELATIVE SSL CERT: ' + CRT)
                     if not args.ignore_validation_warnings:
@@ -1286,8 +1286,8 @@ def validate_configs():
                 if KEY.startswith('/'):
                     logging.debug('ABSOLUTE SSL KEY: ' + KEY)
                     if not os.path.isfile(KEY) and not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: SSLCertificateKeyFile directive specifies potentially non-existant file "' + KEY + '".', C_ORANGE))
-                        logging.warning('SSLCertificateKeyFile directive specifies potentially non-existant file "' + KEY + '".')
+                        printe(_subsubstep('Warning: SSLCertificateKeyFile directive specifies potentially non-existent file "' + KEY + '".', C_ORANGE))
+                        logging.warning('SSLCertificateKeyFile directive specifies potentially non-existent file "' + KEY + '".')
                 else:
                     logging.debug('RELATIVE SSL KEY: ' + KEY)
                     if not args.ignore_validation_warnings:
@@ -1301,8 +1301,8 @@ def validate_configs():
                     logging.debug('ABSOLUTE TRANSFER LOG: ' + TL)
                     TLDIR = os.path.dirname(TL)
                     if not os.path.isdir(TLDIR) and not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: TransferLog directive specifies potentially non-existant parent directory "' + TLDIR + '".', C_ORANGE))
-                        logging.warning('TransferLog directive specifies potentially non-existant parent directory "' + TLDIR + '".')
+                        printe(_subsubstep('Warning: TransferLog directive specifies potentially non-existent parent directory "' + TLDIR + '".', C_ORANGE))
+                        logging.warning('TransferLog directive specifies potentially non-existent parent directory "' + TLDIR + '".')
                 else:
                     logging.debug('RELATIVE TRANSFER LOG: ' + TL)
                     if not args.ignore_validation_warnings:
