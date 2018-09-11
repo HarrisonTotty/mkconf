@@ -7,6 +7,7 @@ An Apache Web Server configuration generation script.
 
 # ------- Python Library Imports -------
 
+# Standard Library
 import argparse
 import glob
 import logging
@@ -17,15 +18,17 @@ import socket
 import subprocess
 import sys
 
-try:
-    import jinja2
-except ImportError as e:
-    exit('Unable to import Jinja2 library - ' + str(e) + '.')
-
-try:
-    import yaml
-except ImportError as e:
-    exit('Unable to import PyYAML library - ' + str(e) + '.')
+# Additional Dependencies
+if not '-v' in sys.argv and not '--validate' in sys.argv:
+    try:
+        import jinja2
+    except ImportError as e:
+        exit('Unable to import Jinja2 library - ' + str(e) + '.')
+     
+    try:
+        import yaml
+    except ImportError as e:
+        exit('Unable to import PyYAML library - ' + str(e) + '.')
 
 # --------------------------------------
 
@@ -49,6 +52,7 @@ MKCONF_COMMENT_END_STR    :  --comment-end-string
 MKCONF_COMMENT_START_STR  :  --comment-start-string
 MKCONF_EMAIL_LVL          :  --email-level
 MKCONF_EMAIL_TO           :  --email-to
+MKCONF_EXCLUDE            :  --exclude
 MKCONF_LOG_FILE           :  --log-file
 MKCONF_LOG_LVL            :  --log-level
 MKCONF_LOG_MODE           :  --log-mode
@@ -83,6 +87,16 @@ grp_directive_regex = re.compile(r'^\s*\<(?P<name>[a-zA-Z]+)\s*(?P<value>.*)\>$'
 ifconfig_regex      = re.compile(r'^(?P<int>[\w]+:?[0-9]*)\s+Link[\s\w:]+addr:(?P<ip>[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})[ \w:\.]+Mask:(?P<mask>[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})\s+UP')
 ip_regex            = re.compile(r'^[0-9]+: (?P<int>[\w:]+): \<[\s\w,]+\>[\s\w/:]+inet (?P<ip>[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})/(?P<maskbits>[0-9]+)')
 valid_fqdn_regex    = re.compile(r'(?=^.{1,253}$)(^(((?!-)[a-zA-Z0-9-]{1,63}(?<!-))|((?!-)[a-zA-Z0-9-]{1,63}(?<!-)\.)+[a-zA-Z]{2,63})$)')
+
+# Possible Paths
+service_possible_paths = [
+    '/sbin/service',
+    '/usr/sbin/service'
+]
+init_script_possible_paths = [
+    '/etc/init.d/httpd',
+    '/etc/init.d/apache'
+]
 
 # --------------------------------------
 
@@ -140,8 +154,16 @@ CANT_RENDER_TEMPLATE = """
 {pre} it encountered an exception while trying to render one of the specified source templates.
 """.format(pre=PRE_MSG)
 
+CANT_RESTART_HTTPD = """
+{pre} it encountered an issue while trying to reload or restart the Apache Web Server service.
+""".format(pre=PRE_MSG)
+
 CANT_WRITE_OUTPUT = """
 {pre} it was unable to write the newly-generated configuration files to the specified output directory.
+""".format(pre=PRE_MSG)
+
+COMPLETE = """
+{pre} the Apache Web Server configuration process completed successfully.
 """.format(pre=PRE_MSG)
 
 INVALID_GROUP_DIRECTIVE = """
@@ -186,6 +208,12 @@ TEMPLATE_SOURCE_DIR_DOESNT_EXIST = """
 
 TEMPLATE_VHOST_DIR_DOESNT_EXIST = """
 {pre} the "vhosts.d" subdirectory of specified template source directory does not exist.
+""".format(pre=PRE_MSG)
+
+VALIDATION_WARNINGS = """
+{pre} the following warnings were encountered while validating the generated Apache Web Server configuration files:
+
+
 """.format(pre=PRE_MSG)
 
 VHOST_TEMPLATE_NOT_FOUND = """
@@ -283,14 +311,16 @@ def _parse_arguments():
         usage = 'mkconf TEMPLATE_CONF TEMPLATE_SOURCE [-o DEST] [...]',
         add_help = False,
         formatter_class = lambda prog: argparse.RawDescriptionHelpFormatter(prog, max_help_position=45, width=100)
+    )
+    # Pre-parse for --revert and --validate
+    if not '--revert' in sys.argv and not '-v' in sys.argv and not '--validate' in sys.argv:
+        argparser.add_argument(
+            'template_conf',
+            help = 'Specifies the path to the template configuration YAML file. If a directory is supplied, then mkconf will look for a YAML file called "mkconf.yaml" or one with a name closest to the hostname of the executing machine.',
         )
-    argparser.add_argument(
-        'template_conf',
-        help = 'Specifies the path to the template configuration YAML file.',
-        )
-    argparser.add_argument(
-        'template_source',
-        help = 'Specifies the source directory of the Apache Web Server configuration templates.',
+        argparser.add_argument(
+            'template_source',
+            help = 'Specifies the source directory of the Apache Web Server configuration templates.',
         )
     # Note that the "add_argument" statements for "--block-end-string" and
     # "--block-start-string" look like the help string claims that the default
@@ -302,47 +332,47 @@ def _parse_arguments():
         dest = 'block_end_string',
         help = 'Specifies the string marking the end of a Jinja template block. Defaults to "%%}".',
         metavar = 'STR'
-        )
+    )
     argparser.add_argument(
         '--block-start-string',
         default = os.getenv('MKCONF_BLOCK_START_STR', '{%'),
         dest = 'block_start_string',
         help = 'Specifies the string marking the start of a Jinja template block. Defaults to "{%%".',
         metavar = 'STR'
-        )
+    )
     argparser.add_argument(
         '--comment-end-string',
         default = os.getenv('MKCONF_COMMENT_END_STR', '#}'),
         dest = 'comment_end_string',
         help = 'Specifies the string marking the end of a Jinja template comment. Defaults to "#}".',
         metavar = 'STR'
-        )
+    )
     argparser.add_argument(
         '--comment-start-string',
         default = os.getenv('MKCONF_COMMENT_START_STR', '{#'),
         dest = 'comment_start_string',
         help = 'Specifies the string marking the start of a Jinja template comment. Defaults to "{#".',
         metavar = 'STR'
-        )
+    )
     argparser.add_argument(
         '--delete',
         action = 'store_true',
         dest = 'delete',
-        help = 'Specifies that the script should delete any files in the output directory that are not part of the generated configuration.'
-        )
+        help = 'Specifies that the script should delete any files in the output directory that are not part of the generated configuration. Certain files and subdirectories may be preserved with the "--exclude" option.'
+    )
     argparser.add_argument(
-        '--dont-trim-jinja-blocks',
+        '--dont-trim-blocks',
         action = 'store_false',
         dest = 'trim_jinja_blocks',
         help = 'Specifies that the first newline character after a Jinja block should NOT be removed.'
-        )
+    )
     argparser.add_argument(
         '-d',
         '--dry-run',
         action = 'store_true',
         dest = 'dry_run',
         help = 'Specifies that the script should only execute a dry-run, preventing the generated configuration files from being copied from the working directory to the output directory.'
-        )
+    )
     argparser.add_argument(
         '-e',
         '--email-level',
@@ -351,27 +381,36 @@ def _parse_arguments():
         dest = 'email_level',
         help = 'Specifies the condition at which the script should send an email, being "never", "error", "warning", or "completion". Defaults to "never".',
         metavar = 'LVL'
-        )
+    )
     argparser.add_argument(
+        '-t',
         '--email-to',
         default = os.getenv('MKCONF_EMAIL_TO', ''),
         dest = 'email_to',
         help = 'Specifies the email address to receive sent emails. This option is ignored if "-e" is not specified or set to "never".',
         metavar = 'EMAIL'
-        )
+    )
+    argparser.add_argument(
+        '--exclude',
+        default = os.getenv('MKCONF_EXCLUDE', '').split(' '),
+        dest = 'exclude',
+        help = 'Specifies an additional list of files or directories relative to the specified output directory that should be preserved on write (if "--delete" is supplied). The script automatically preserves the "logs", "modules", and "run" subdirectories.',
+        metavar = 'PATH',
+        nargs = '+'
+    )
     argparser.add_argument(
         '-h',
         '--help',
         action = 'help',
         help = 'Displays help and usage information.'
-        )
+    )
     argparser.add_argument(
         '-i',
         '--ignore-validation-warnings',
         action = 'store_true',
         dest = 'ignore_validation_warnings',
         help = 'Disables printing/logging of warning-level issues during the generated configuration validation process.'
-        )
+    )
     argparser.add_argument(
         '-f',
         '--log-file',
@@ -379,7 +418,7 @@ def _parse_arguments():
         dest = 'log_file',
         help = 'Specifies a log file to write to in addition to stdout/stderr.',
         metavar = 'FILE'
-        )
+    )
     argparser.add_argument(
         '-l',
         '--log-level',
@@ -388,7 +427,7 @@ def _parse_arguments():
         dest = 'log_level',
         help = 'Specifies the log level of the script, being either "info" or "debug". Defaults to "info". This option is ignored if "--log-file" is not specified.',
         metavar = 'LVL'
-        )
+    )
     argparser.add_argument(
         '-m',
         '--log-mode',
@@ -397,19 +436,19 @@ def _parse_arguments():
         dest = 'log_mode',
         help = 'Specifies whether to "append" or "overwrite" the specified log file. Defaults to "append". This option is ignored if "--log-file" is not specified.',
         metavar = 'MODE'
-        )
+    )
     argparser.add_argument(
         '--no-backup',
         action = 'store_false',
         dest = 'do_backup',
         help = 'Specifies that the script should not perform a backup of the specified output directory prior to writing the generated configuration files.'
-        )
+    )
     argparser.add_argument(
         '--no-color',
         action = 'store_false',
         dest = 'color_output',
         help = 'Disables color output to stdout/stderr.'
-        )
+    )
     argparser.add_argument(
         '-o',
         '--output',
@@ -417,28 +456,60 @@ def _parse_arguments():
         dest = 'output',
         help = 'Specifies the output directory of the generated templates. Defaults to "/etc/httpd/".',
         metavar = 'DIR'
-        )
+    )
+    argparser.add_argument(
+        '-r',
+        '--reload-httpd',
+        action = 'store_true',
+        dest = 'reload_httpd',
+        help = 'Specifies that the local Apache Web Server service should be reloaded in-place after the generated configuration has been written to the specified output directory. This option is incompatible with "--restart-httpd".'
+    )
+    argparser.add_argument(
+        '--restart-httpd',
+        action = 'store_true',
+        dest = 'restart_httpd',
+        help = 'Specifies that the local Apache Web Server service should be restarted after the generated configuration has been written to the specified output directory. This option is incompatible with "--reload-httpd".'
+    )
+    argparser.add_argument(
+        '--revert',
+        const = 'DEFAULT',
+        default = '',
+        dest = 'revert',
+        help = 'Restores the contents of an existing backup directory relative to the specified output directory. If a path is provided alongside this flag, that location will instead be utilized as the restoration source.',
+        metavar = 'DIR',
+        nargs = '?'
+    )
     argparser.add_argument(
         '--rsync-executable',
         default = os.getenv('MKCONF_RSYNC_PATH', '/usr/bin/rsync'),
         dest = 'rsync_executable',
         help = 'Specifies a file path to the rsync executable utilized for transferring directories. Defaults to "/usr/bin/rsync".',
         metavar = 'FILE'
-        )
+    )
+    argparser.add_argument(
+        '-v',
+        '--validate',
+        const = 'DEFAULT',
+        default = '',
+        dest = 'validate',
+        help = 'Performs the validation step for all configuration files in the specified directory, or within the default output directory if none is supplied.',
+        metavar = 'DIR',
+        nargs = '?'
+    )
     argparser.add_argument(
         '--variable-end-string',
         default = os.getenv('MKCONF_VAR_END_STR', '}}'),
         dest = 'variable_end_string',
         help = 'Specifies the string marking the end of a Jinja template variable. Defaults to "}}".',
         metavar = 'STR'
-        )
+    )
     argparser.add_argument(
         '--variable-start-string',
         default = os.getenv('MKCONF_VAR_START_STR', '{{'),
         dest = 'variable_start_string',
         help = 'Specifies the string marking the start of a Jinja template variable. Defaults to "{{".',
         metavar = 'STR'
-        )
+    )
     argparser.add_argument(
         '-w',
         '--working-directory',
@@ -446,9 +517,17 @@ def _parse_arguments():
         dest = 'working_directory',
         help = 'Specifies the working directory. Defaults to "/tmp/mkconf".',
         metavar = 'DIR'
-        )
+    )
     global args
     args = argparser.parse_args()
+
+
+def _raise(message):
+    '''
+    A mkconf-provided Jinja function that raises an exception with the supplied
+    message.
+    '''
+    raise Exception(message)
 
 
 def _rsync(src, dst, rsync_args=''):
@@ -690,7 +769,166 @@ def get_network_interfaces():
                 logging.error('Unable to obtain network interfaces with "ip" - unknown subprocess output. Script will continue with an empty value for "network_interfaces".')
                 return
 
-            
+
+def handle_reload_restart():
+    '''
+    Handles reloading/restarting the Apache Web Server service.
+    '''
+    if args.reload_httpd:
+        print(_substep('Reloading Apache Web Server service...'))
+        logging.info('Reloading Apache Web Server service...')
+        script_subcommmand = 'reload'
+    else:
+        print(_substep('Restarting Apache Web Server service...'))
+        logging.info('Restarting Apache Web Server service...')
+        script_subcommand = 'restart'
+    logging.debug('Selecting service executable...')
+    service_executable = next((p for p in service_possible_paths if os.path.isfile(p)), '')
+    if not service_executable:
+        printe(_subsubstep('Unable to reload or restart service - unable to select suitable service executable.', C_RED))
+        logging.critical('Unable to reload or restart service - unable to select suitable service executable.')
+        send_email(
+            'Unable to reload/restart Apache Web Server service',
+            CANT_RESTART_HTTPD,
+            'error'
+        )
+        exit(8)
+    logging.debug('SELECTED SERVICE EXECUTABLE: ' + service_executable)
+    logging.debug('Selecting init script...')
+    init_script = next((os.path.basename(p) for p in init_script_possible_paths if os.path.isfile(p)), '')
+    if not init_script:
+        printe(_subsubstep('Unable to reload or restart service - unable to select suitable init script.', C_RED))
+        logging.critical('Unable to reload or restart service - unable to select suitable init script.')
+        send_email(
+            'Unable to reload/restart Apache Web Server service',
+            CANT_RESTART_HTTPD,
+            'error'
+        )
+        exit(8)
+    logging.debug('SELECTED INIT SCRIPT: ' + init_script)
+    command = service_executable + ' ' + init_script + ' '
+    if args.reload_httpd:
+        command += 'reload'
+    else:
+        command += 'restart'
+    if not args.dry_run:
+        try:
+            (httpd_out, httpd_ec) = _run_process(command)
+        except Exception as e:
+            printe(_subsubstep('Unable to reload or restart service - ' + str(e) + '.', C_RED))
+            logging.critical('Unable to reload or restart service - ' + str(e) + '.')
+            send_email(
+                'Unable to reload/restart Apache Web Server service',
+                CANT_RESTART_HTTPD,
+                'error'
+            )
+            exit(8)
+        logging.debug('SERVICE EXIT CODE: ' + str(httpd_ec))
+        if httpd_ec != 0:
+            if httpd_out:
+                for l in httpd_out:
+                    logging.critical('SERVICE OUTPUT: ' + l)
+            printe(_subsubstep('Unable to reload or restart service - subprocess returned non-zero exit code.', C_RED))
+            logging.critical('Unable to reload or restart service - subprocess returned non-zero exit code.')
+            send_email(
+                'Unable to reload/restart Apache Web Server service',
+                CANT_RESTART_HTTPD,
+                'error'
+            )
+            exit(8)
+        if httpd_out:
+                for l in httpd_out:
+                    logging.debug('SERVICE OUTPUT: ' + l)
+    else:
+        logging.info('Apache Web Server reload/restart skipped due to dry-run being enabled.')
+
+
+def handle_revert():
+    '''
+    Handles --revert.
+    '''
+    print(_step('Reverting changes...'))
+    logging.info('Reverting changes...')
+    if args.revert == 'DEFAULT':
+        print(_substep('Restoring configuration from dedicated backup...'))
+        logging.debug('Restoring configuration from dedicated backup...')
+        backup_dir = args.output + '.backup'
+    else:
+        print(_substep('Restoring configuration from specified directory...'))
+        logging.debug('Restoring configuration from specified directory...')
+        backup_dir = args.revert
+    if not os.path.isdir(backup_dir):
+        if args.revert == 'DEFAULT':
+            printe(_subsubstep('Unable to restore configuration - dedicated backup directory does not exist.', C_RED))
+            logging.critical('Unable to restore configuration - dedicated backup directory does not exist.')
+        else:
+            printe(_subsubstep('Unable to restore configuration - specified source directory does not exist.', C_RED))
+            logging.critical('Unable to restore configuration - specified source directory does not exist.')
+        exit(9)
+    if not os.path.isdir(args.output):
+        try:
+            os.makedirs(args.output)
+        except Exception as e:
+            printe(_subsubstep('Unable to restore configuration - unable to create output directory - ' + str(e) + '.', C_RED))
+            logging.critical('Unable to restore configuration - unable to create output directory - ' + str(e) + '.')
+            exit(9)
+    try:
+        (revert_out, revert_ec) = _rsync(
+            src = backup_dir.rstrip('/') + '/',
+            dst = args.output.rstrip('/') + '/',
+            rsync_args = '-a --delete --progress'
+        )
+    except Exception as e:
+        printe(_subsubstep('Unable to restore configuration - ' + str(e) + '.', C_RED))
+        logging.critical('Unable to restore configuration - ' + str(e) + '.')
+        exit(9)
+    logging.debug('REVERT EXIT CODE: ' + str(revert_ec))
+    if revert_ec != 0:
+        if revert_out:
+            for l in revert_out:
+                logging.critical('REVERT OUTPUT: ' + l)
+        printe(_subsubstep('Unable to restore configuration - subprocess returned non-zero exit code.', C_RED))
+        logging.critical('Unable to restore configuration - subprocess returned non-zero exit code.')
+        exit(9)
+    else:
+        if revert_out:
+            for l in revert_out:
+                logging.debug('REVERT OUTPUT: ' + l)
+
+
+def handle_validate():
+    '''
+    Handles -v/--validate.
+
+    We essentially "trick" validate_configs() by computing the paths as if they
+    were in the working directory.
+    '''
+    if args.validate == 'DEFAULT':
+        source_dir = args.output
+    else:
+        source_dir = args.validate
+    logging.debug('VALIDATION SOURCE DIRECTORY: ' + source_dir)
+    if not os.path.isdir(source_dir):
+        printe(_c('Unable to validate configuration - "' + source_dir + '" does not exist.', C_RED))
+        logging.critical('Unable to validate configuration - "' + source_dir + '" does not exist.')
+        exit(6)
+    global working_paths
+    try:
+        working_paths = [os.path.join(parent, f) for parent, dirs, files in os.walk(source_dir) for f in files]
+    except Exception as e:
+        printe(_c('Unable to validate configuration - unable to enumerate source directory - ' + str(e) + '.', C_RED))
+        logging.critical('Unable to validate configuration - unable to enumerate source directory - ' + str(e) + '.')
+        exit(6)
+    if not working_paths:
+        printe(_c('Unable to validate configuration - default or specified directory does not contain any files.', C_RED))
+        logging.critical('Unable to validate configuration - default or specified directory does not contain any files.')
+        exit(6)
+    logging.debug('VALIDATION WORKING PATHS: ' + str(working_paths))
+    args.working_directory = source_dir
+    args.output = source_dir
+    validate_configs()
+
+
 def main():
     '''
     The entrypoint of the script.
@@ -702,16 +940,33 @@ def main():
     if args.email_level != 'never' and not args.email_to:
         printe(_c('Invalid option combination: "--email-to" not specified.', C_RED))
         exit(1)
+    if args.reload_httpd and args.restart_httpd:
+        printe(_c('Invalid option combination: "-r"/"--reload-httpd" is not compatible with "--restart-httpd".', C_RED))
+        exit(1)
+    if args.revert and args.validate:
+        printe(_c('Invalid option combination: "--revert" is not compatible with "-v"/"--validate".', C_RED))
+        exit(1)
+    if args.validate and (args.reload_httpd or args.restart_httpd):
+        printe(_c('Invalid option combination: "-v"/"--validate" is not compatible with "-r"/"--reload-httpd" or "--restart-httpd".', C_RED))
+        exit(1)
 
     # Setup logging
     _setup_logging()
-    logging.info('Started configuration process.')
+    if args.revert:
+        logging.info('Started revert process.')
+    elif args.validate:
+        logging.info('Started validation process.')
+    else:
+        logging.info('Started configuration process.')
 
     # Get the hostname of the machine
     get_hostname()
 
     # Get the dictionary of network interfaces for the machine
-    get_network_interfaces()
+    #get_network_interfaces()
+    global network_interfaces
+    network_interfaces = {}
+    logging.debug('Skipped network interface parsing.')
 
     # Log our CLI arguments when in DEBUG mode
     logging.debug('----- CLI Arguments -----')
@@ -720,25 +975,45 @@ def main():
         logging.debug(a + ' : ' + str(dargs[a]))
     logging.debug('-------------------------')
 
-    # Set-up and validate the environment
-    validate_environment()
+    # Handle --revert or --validate if they are specified
+    if args.revert:
+        handle_revert()
+    elif args.validate:
+        handle_validate()
+    else:
+        # Set-up and validate the environment
+        validate_environment()
+        
+        # Parse template configuration file
+        parse_yaml_config()
+        
+        # Set-up the jinja environment
+        setup_jinja()
+        
+        # Translate templates (saving into the working directory)
+        translate_templates()
+        
+        # Validate the generated configuration files
+        validate_configs()
+        
+        # Write to the output directory
+        write_output()
 
-    # Parse template configuration file
-    parse_yaml_config()
+    # Reload/restart httpd if necessary
+    if args.reload_httpd or args.restart_httpd:
+        handle_reload_restart()
 
-    # Set-up the jinja environment
-    setup_jinja()
-
-    # Translate templates (saving into the working directory)
-    translate_templates()
-
-    # Validate the generated configuration files
-    validate_configs()
-
-    # Write to the output directory
-    write_output()
-
-    logging.info('Configuration process complete.')
+    if args.revert:
+        logging.info('Revert process complete.')
+    elif args.validate:
+        logging.info('Validation process complete.')
+    else:
+        logging.info('Configuration process complete.')
+        send_email(
+            'Configuration process complete',
+            COMPLETE,
+            'info'
+        )
     exit(0)
 
 
@@ -792,34 +1067,56 @@ def parse_yaml_config():
         )
         exit(3)
     if not isinstance(template_conf['templates'], list):
-        printe(_subsubstep('Invalid template configuration - "templates" specification is not a list of file paths.', C_RED))
-        logging.critical('Invalid template configuration - "templates" specification is not a list of file paths.')
+        printe(_subsubstep('Invalid template configuration - "templates" specification is not a list of dictionaries.', C_RED))
+        logging.critical('Invalid template configuration - "templates" specification is not a list of dictionaries.')
         send_email(
             'Unable to validate template configuration file',
             INVALID_TEMPLATE_CONF,
             'error'
         )
         exit(3)
-    # Pull out the templates into a list with duplicates removed.
+    # Pull out the templates into a dictionary of output-input mappings.
     logging.debug('Extracting template file paths...')
-    templates = []
+    templates = {}
+    # templates[OUTPUT (RELATIVE)] = INPUT (RELATIVE)
     for spec in template_conf['templates']:
-        full_spec = os.path.join(args.template_source, spec)
-        if '*' in spec:
-            g = glob.glob(full_spec)
+        if not 'file' in spec:
+            printe(_subsubstep('Invalid template configuration - missing "file" key in source templates specification.', C_RED))
+            logging.critical('Invalid template configuration - missing "file" key in source templates specification.')
+            send_email(
+                'Unable to validate template configuration file',
+                INVALID_TEMPLATE_CONF,
+                'error'
+            )
+            exit(3)
+        file_spec = os.path.join(args.template_source, spec['file'])
+        if '*' in spec['file']:
+            if 'template' in spec:
+                printe(_subsubstep('Invalid template configuration - found "template" key in source templates specification alongside wildcard "file" key.', C_RED))
+                logging.critical('Invalid template configuration - found "template" key in source templates specification alongside wildcard "file" key.')
+                send_email(
+                    'Unable to validate template configuration file',
+                    INVALID_TEMPLATE_CONF,
+                    'error'
+                )
+                exit(3)
+            g = glob.glob(file_spec)
             if not g:
-                printe(_subsubstep('Warning: No files found matching glob "' + full_spec + '".', C_ORANGE))
-                logging.warning('No files found matching glob "' + full_spec + '".')
+                printe(_subsubstep('Warning: No files found matching glob "' + file_spec + '".', C_ORANGE))
+                logging.warning('No files found matching glob "' + file_spec + '".')
             else:
-                templates.extend(g)
+                for x in g:
+                    templates[os.path.relpath(x, args.template_source)] = os.path.relpath(x, args.template_source)
         else:
-            templates.append(full_spec)
-    templates = list(set(templates))
-    logging.debug('TEMPLATE FILE PATHS: ' + str(templates))
+            if 'template' in spec:
+                templates[spec['file']] = spec['template']
+            else:
+                templates[spec['file']] = spec['file']
+    logging.debug('TEMPLATE FILE MAPPINGS: ' + str(templates))
     for f in templates:
-        if not os.path.isfile(f):
-            printe(_subsubstep('Invalid template configuration - specified source template "' + f + '" does not exist.', C_RED))
-            logging.critical('Invalid template configuration - specified source template "' + f + '" does not exist.')
+        if not os.path.isfile(os.path.join(args.template_source, templates[f])):
+            printe(_subsubstep('Invalid template configuration - specified source template "' + templates[f] + '" does not exist.', C_RED))
+            logging.critical('Invalid template configuration - specified source template "' + templates[f] + '" does not exist.')
             send_email(
                 'Unable to validate template configuration file',
                 TEMPLATE_FILE_NOT_FOUND,
@@ -844,23 +1141,27 @@ def parse_yaml_config():
             'error'
         )
         exit(3)
+    vhost_templates = {}
+    # vhost_templates[OUTPUT (RELATIVE)] = INPUT (RELATIVE)
     for vhost in template_conf['virtual_hosts']:
         if not 'file' in vhost:
-            printe(_subsubstep('Invalid template configuration - One or more "virtual_hosts" specifications does not contain the required "file" variable.', C_RED))
-            logging.critical('Invalid template configuration - One or more "virtual_hosts" specifications does not contain the required "file" variable.')
+            printe(_subsubstep('Invalid template configuration - One or more "virtual_hosts" specifications does not contain the required "file" key.', C_RED))
+            logging.critical('Invalid template configuration - One or more "virtual_hosts" specifications does not contain the required "file" key.')
             send_email(
                 'Unable to validate template configuration file',
                 INVALID_TEMPLATE_CONF,
                 'error'
             )
             exit(3)
-    logging.debug('Extracting virtual host template paths...')
-    vhost_templates = [os.path.join(args.template_source, 'vhosts.d', x['file']) for x in template_conf['virtual_hosts']]
-    logging.debug('VHOST TEMPLATE PATHS: ' + str(vhost_templates))
+        if 'template' in vhost:
+            vhost_templates[os.path.join('vhosts.d', vhost['file'])] = os.path.join('vhosts.d', vhost['template'])
+        else:
+            vhost_templates[os.path.join('vhosts.d', vhost['file'])] = os.path.join('vhosts.d', vhost['file'])
+    logging.debug('VHOST TEMPLATE MAPPINGS: ' + str(vhost_templates))
     for f in vhost_templates:
-        if not os.path.isfile(f):
-            printe(_subsubstep('Invalid template configuration - specified vhost template "' + f + '" does not exist.', C_RED))
-            logging.critical('Invalid template configuration - specified vhost template "' + f + '" does not exist.')
+        if not os.path.isfile(os.path.join(args.template_source, vhost_templates[f])):
+            printe(_subsubstep('Invalid template configuration - specified vhost template "' + vhost_templates[f] + '" does not exist.', C_RED))
+            logging.critical('Invalid template configuration - specified vhost template "' + vhost_templates[f] + '" does not exist.')
             send_email(
                 'Unable to validate template configuration file',
                 VHOST_TEMPLATE_NOT_FOUND,
@@ -869,7 +1170,17 @@ def parse_yaml_config():
             exit(3)
     logging.debug('Finalizing template paths...')
     global template_paths
-    template_paths = templates + vhost_templates
+    template_paths = templates.copy()
+    template_paths.update(vhost_templates)
+
+
+def print_jinja(message):
+    '''
+    A mkconf-provided Jinja function that prints and logs the specified message.
+    '''
+    print(_subsubstep(message, C_BLUE))
+    logging.info(message)
+    return ''
 
     
 def printe(instring):
@@ -879,26 +1190,27 @@ def printe(instring):
     sys.stderr.write(instring + '\n')
 
 
-@jinja2.contextfunction
-def require(context, *variables):
-    '''
-    A Jinja filter which specifies that the specified variables are required.
-
-    See:
-    http://jinja.pocoo.org/docs/2.10/api/#the-context
-    http://jinja.pocoo.org/docs/2.10/api/#jinja2.contextfilter
-    '''
-    for variable in variables:
-        if '.' in variable:
-            splitvar = variable.split('.', 1)
-            if not splitvar[0] in context:
-                raise Exception('Required variable "' + splitvar[0] + '" not found in within the context of "' + context.name + '".')
-            if not splitvar[1] in context[splitvar[0]]:
-                raise Exception('Required variable "' + variable + '" not found in within the context of "' + context.name + '".')
-        else:
-            if not variable in context:
-                raise Exception('Required variable "' + variable + '" not found in within the context of "' + context.name + '".')
-    return ''
+if not '-v' in sys.argv and not '--validate' in sys.argv:
+    @jinja2.contextfunction
+    def require(context, *variables):
+        '''
+        A Jinja filter which specifies that the specified variables are required.
+     
+        See:
+        http://jinja.pocoo.org/docs/2.10/api/#the-context
+        http://jinja.pocoo.org/docs/2.10/api/#jinja2.contextfilter
+        '''
+        for variable in variables:
+            if '.' in variable:
+                splitvar = variable.split('.', 1)
+                if not splitvar[0] in context:
+                    raise Exception('Required variable "' + splitvar[0] + '" not found in within the context of "' + context.name + '".')
+                if not splitvar[1] in context[splitvar[0]]:
+                    raise Exception('Required variable "' + variable + '" not found in within the context of "' + context.name + '".')
+            else:
+                if not variable in context:
+                    raise Exception('Required variable "' + variable + '" not found in within the context of "' + context.name + '".')
+        return ''
     
 
 def send_email(subject, body, level='error'):
@@ -968,6 +1280,8 @@ def setup_jinja():
         jinja_env.globals['get_ip']      = _get_ip
         jinja_env.globals['domain_join'] = _domain_join
         jinja_env.globals['path_join']   = os.path.join
+        jinja_env.globals['print']       = print_jinja
+        jinja_env.globals['raise']       = _raise
         jinja_env.globals['require']     = require
     except Exception as e:
         printe(_subsubstep('Unable to initialize templating extensions - ' + str(e) + '.', C_RED))
@@ -989,11 +1303,11 @@ def translate_templates():
     logging.info('Translating templates...')
     global working_paths
     working_paths = []
-    for template_path in template_paths:
-        rel_path = os.path.relpath(template_path, args.template_source)
-        filename = os.path.basename(template_path)
-        print(_substep(rel_path))
-        logging.info('Translating "' + rel_path + '"...')
+    for output_path in template_paths:
+        rel_path = template_paths[output_path]
+        filename = os.path.basename(template_paths[output_path])
+        print(_substep(output_path))
+        logging.info('Translating "' + os.path.join(args.template_source, rel_path) + '" into "' + os.path.join(args.working_directory, output_path) + '"...')
         logging.debug('Loading template...')
         try:
             template = jinja_env.get_template(rel_path)
@@ -1016,11 +1330,20 @@ def translate_templates():
             # relevant entry in virtual_hosts
             else:
                 logging.debug('Rendering virtual host template...')
-                vhost = next(v for v in template_conf['virtual_hosts'] if v['file'] == filename)
+                vhost = next(v for v in template_conf['virtual_hosts'] if ('template' in v and v['template'] == filename) or v['file'] == filename)
                 vhost_conf = template_conf.copy()
                 vhost_conf['vhost'] = vhost
                 vhost_conf['file'] = filename
                 rendered_template = template.render(**vhost_conf)
+        except jinja2.TemplateSyntaxError as e:
+            printe(_subsubstep('Unable to render template - template syntax error on line ' + str(e.lineno) + ' - ' + str(e), C_RED))
+            logging.critical('Unable to render template - template syntax error on line ' + str(e.lineno) + ' - ' + str(e))
+            send_email(
+                'Unable to render template',
+                CANT_RENDER_TEMPLATE,
+                'error'
+            )
+            exit(5)
         except Exception as e:
             printe(_subsubstep('Unable to render template - ' + str(e), C_RED))
             logging.critical('Unable to render template - ' + str(e))
@@ -1031,7 +1354,7 @@ def translate_templates():
             )
             exit(5)
         logging.debug('Writing rendered configuration file to working directory...')
-        working_path = os.path.join(args.working_directory, rel_path)
+        working_path = os.path.join(args.working_directory, output_path)
         working_paths.append(working_path)
         if not os.path.isdir(os.path.dirname(working_path)):
             try:
@@ -1063,8 +1386,22 @@ def validate_configs():
     '''
     Validates the newly generated configuration files within the working directory.
     '''
-    print(_step('Validating generated configuration files...'))
-    logging.info('Validating generated configuration files...')
+    print(_step('Validating configuration files...'))
+    logging.info('Validating configuration files...')
+    global email_warnings
+    email_warnings = ''
+    def validation_issue(template, issue_string, line_number=0, critical=False):
+        '''
+        Submethod used to clean-up some of the code redundancy below.
+        '''
+        global email_warnings
+        if critical:
+            printe(_subsubstep('[' + str(line_number) + '] Error: ' + issue_string, C_RED))
+            logging.critical('(Line ' + str(line_number) + ') ' + issue_string)
+        elif not args.ignore_validation_warnings:
+            printe(_subsubstep('[' + str(line_number) + '] Warning: ' + issue_string, C_ORANGE))
+            logging.warning('(Line ' + str(line_number) + ') ' + issue_string)
+            email_warnings += '[' + template + ' : ' + str(line_number) + ']  ' + issue_string + '\n'
     for p in working_paths:
         rel_path = os.path.relpath(p, args.working_directory)
         print(_substep(rel_path))
@@ -1074,8 +1411,7 @@ def validate_configs():
             with open(p, 'r') as f:
                 content = f.read()
         except Exception as e:
-            printe(_subsubstep('Unable to read generated configuration file - ' + str(e), C_RED))
-            logging.critical('Unable to read generated configuration file - ' + str(e))
+            validation_issue('Unable to read generated configuration file - ' + str(e), critical=True)
             send_email(
                 'Unable to read generated configuration file for validation',
                 CANT_READ_GEN_CONFIG,
@@ -1095,7 +1431,6 @@ def validate_configs():
             if GRP:
                 logging.debug('GROUP DIRECTIVE: ' + l.strip())
                 # Make sure that <foo> is followed by a </foo>
-                found_closing = False
                 num_found = 0
                 num_required = 0 # Note that we start on the same line to avoid overflows
                 for after in lines[index:]:
@@ -1108,8 +1443,7 @@ def validate_configs():
                                 num_required += 1
                 logging.debug('Found ' + str(num_found) + ' closing statements for ' + str(num_required) + ' required similar directives.')
                 if num_found < num_required:
-                    printe(_subsubstep('Error: Group directive specification "' + l.strip() + '" does not have a matching closing statement.', C_RED))
-                    logging.critical('Group directive specification "' + l.strip() + '" does not have a matching closing statement.')
+                    validation_issue('Group directive specification "' + l.strip() + '" does not have a matching closing statement.', line_number=(index + 1), critical=True)
                     send_email(
                         'Invalid group directive found',
                         INVALID_GROUP_DIRECTIVE,
@@ -1122,14 +1456,11 @@ def validate_configs():
                 logging.debug('Validating DocumentRoot directive...')
                 if DR.startswith('/'):
                     logging.debug('ABSOLUTE DOCUMENT ROOT: ' + DR)
-                    if not os.path.isdir(DR) and not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: DocumentRoot directive specifies potentially non-existent directory "' + DR + '".', C_ORANGE))
-                        logging.warning('DocumentRoot directive specifies potentially non-existent directory "' + DR + '".')
+                    if not os.path.isdir(DR):
+                        validation_issue(rel_path, 'DocumentRoot directive specifies potentially non-existent directory "' + DR + '".', line_number=(index + 1))
                 else:
                     logging.debug('RELATIVE DOCUMENT ROOT: ' + DR)
-                    if not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: Found relative-path DocumentRoot directive. Relative-path DocumentRoot directives will not be validated by mkconf.', C_ORANGE))
-                        logging.warning('Found relative-path DocumentRoot directive. Relative-path DocumentRoot directives will not be validated by mkconf.')
+                    validation_issue(rel_path, 'Found relative-path DocumentRoot directive. Relative-path DocumentRoot directives will not be validated by mkconf.', line_number=(index + 1))
             # ----- ErrorLog -----
             ERRL = _directive_match(l, 'ErrorLog')
             if ERRL:
@@ -1137,14 +1468,11 @@ def validate_configs():
                 if ERRL.startswith('/'):
                     logging.debug('ABSOLUTE ERROR LOG: ' + ERRL)
                     ERRDIR = os.path.dirname(ERRL)
-                    if not os.path.isdir(ERRDIR) and not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: ErrorLog directive specifies potentially non-existent parent directory "' + ERRDIR + '".', C_ORANGE))
-                        logging.warning('ErrorLog directive specifies potentially non-existent parent directory "' + ERRDIR + '".')
+                    if not os.path.isdir(ERRDIR):
+                        validation_issue(rel_path, 'ErrorLog directive specifies potentially non-existent parent directory "' + ERRDIR + '".', line_number=(index + 1))
                 else:
                     logging.debug('RELATIVE ERROR LOG: ' + ERRL)
-                    if not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: Found relative-path ErrorLog directive. Relative-path ErrorLog directives will not be validated by mkconf.', C_ORANGE))
-                        logging.warning('Found relative-path ErrorLog directive. Relative-path ErrorLog directives will not be validated by mkconf.')
+                    validation_issue(rel_path, 'Found relative-path ErrorLog directive. Relative-path ErrorLog directives will not be validated by mkconf.', line_number=(index + 1))
             # ----- Include -----
             IP = _directive_match(l, 'Include')
             if IP:
@@ -1156,19 +1484,14 @@ def validate_configs():
                         # directory, then we can search for the file relative to the
                         # working directory.
                         if not os.path.isfile(os.path.join(args.working_directory, os.path.relpath(IP, args.output))) and not os.path.isfile(IP):
-                            if not args.ignore_validation_warnings:
-                                printe(_subsubstep('Warning: Include directive specifies potentially non-existent file "' + IP + '".', C_ORANGE))
-                                logging.warning('Include directive specifies potentially non-existent file "' + IP + '".')
+                            validation_issue(rel_path, 'Include directive specifies potentially non-existent file "' + IP + '".', line_number=(index + 1))
                     else:
                         logging.debug('RELATIVE INCLUDE: ' + IP)
-                        if not os.path.isfile(os.path.join(args.working_directory, IP)) and not args.ignore_validation_warnings:
-                            printe(_subsubstep('Warning: Include directive specifies potentially non-existent file "' + IP + '".', C_ORANGE))
-                            logging.warning('Include directive specifies potentially non-existent file "' + IP + '".')
+                        if not os.path.isfile(os.path.join(args.working_directory, IP)):
+                            validation_issue(rel_path, 'Include directive specifies potentially non-existent file "' + IP + '".', line_number=(index + 1))
                 else:
                     logging.debug('WILDCARD INCLUDE: ' + IP)
-                    if not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: Found wildcard include directive. Wildcard includes will not be validated by mkconf.', C_ORANGE))
-                        logging.warning('Found wildcard include directive. Wildcard includes will not be validated by mkconf.')
+                    validation_issue(rel_path, 'Found wildcard include directive. Wildcard includes will not be validated by mkconf.', line_number=(index + 1))
             # ----- PidFile -----
             PID = _directive_match(l, 'PidFile')
             if PID:
@@ -1176,22 +1499,18 @@ def validate_configs():
                 if PID.startswith('/'):
                     logging.debug('ABSOLUTE PID FILE: ' + PID)
                     PIDDIR = os.path.dirname(PID)
-                    if not os.path.isdir(PIDDIR) and not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: PidFile directive specifies potentially non-existent parent directory "' + PIDDIR + '".', C_ORANGE))
-                        logging.warning('PidFile directive specifies potentially non-existent parent directory "' + PIDDIR + '".')
+                    if not os.path.isdir(PIDDIR):
+                        validation_issue(rel_path, 'PidFile directive specifies potentially non-existent parent directory "' + PIDDIR + '".', line_number=(index + 1))
                 else:
                     logging.debug('RELATIVE PID FILE: ' + PID)
-                    if not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: Found relative-path PidFile directive. Relative-path PidFile directives will not be validated by mkconf.', C_ORANGE))
-                        logging.warning('Found relative-path PidFile directive. Relative-path PidFile directives will not be validated by mkconf.')
+                    validation_issue(rel_path, 'Found relative-path PidFile directive. Relative-path PidFile directives will not be validated by mkconf.', line_number=(index + 1))
             # ----- ServerAlias -----
             SA = _directive_match(l, 'ServerAlias')
             if SA:
                 logging.debug('Validating ServerAlias directive...')
                 logging.debug('SERVER ALIAS: ' + SA)
                 if not valid_fqdn_regex.match(SA):
-                    printe(_subsubstep('Error: Found ServerAlias directive with invalid host string "' + SA + '".', C_RED))
-                    logging.critical('Found ServerAlias directive with invalid host string "' + SA + '".')
+                    validation_issue(rel_path, 'Found ServerAlias directive with invalid host string "' + SA + '".', line_number=(index + 1), critical=True)
                     send_email(
                         'Invalid ServerAlias directive found',
                         INVALID_SERVER_NAME,
@@ -1202,10 +1521,8 @@ def validate_configs():
                 try:
                     SA_IP = socket.gethostbyname(SA)
                 except Exception as e:
-                    if not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: ServerAlias directive specification "' + SA + '" does not resolve in DNS.', C_ORANGE))
-                        logging.warning('ServerAlias directive specification "' + SA + '" does not resolve in DNS.')
-                        logging.warning('Relevant ServerAlias resolution exception: ' + str(e))
+                    validation_issue(rel_path, 'ServerAlias directive specification "' + SA + '" does not resolve in DNS.', line_number=(index + 1))
+                    logging.warning('Relevant ServerAlias resolution exception: ' + str(e))
                 if SA_IP:
                     logging.debug('SERVER ALIAS RESOLVED IP: ' + SA_IP)
             # ----- ServerName -----
@@ -1214,8 +1531,7 @@ def validate_configs():
                 logging.debug('Validating ServerName directive...')
                 logging.debug('SERVER NAME: ' + SN)
                 if not valid_fqdn_regex.match(SN):
-                    printe(_subsubstep('Error: Found ServerName directive with invalid host string "' + SN + '".', C_RED))
-                    logging.critical('Found ServerName directive with invalid host string "' + SN + '".')
+                    validation_issue(rel_path, 'Found ServerName directive with invalid host string "' + SN + '".', line_number=(index + 1), crtitical=True)
                     send_email(
                         'Invalid ServerName directive found',
                         INVALID_SERVER_NAME,
@@ -1226,10 +1542,8 @@ def validate_configs():
                 try:
                     SN_IP = socket.gethostbyname(SN)
                 except Exception as e:
-                    if not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: ServerName directive specification "' + SN + '" does not resolve in DNS.', C_ORANGE))
-                        logging.warning('ServerName directive specification "' + SN + '" does not resolve in DNS.')
-                        logging.warning('Relevant ServerName resolution exception: ' + str(e))
+                    validation_issue(rel_path, 'ServerName directive specification "' + SN + '" does not resolve in DNS.', line_number=(index + 1))
+                    logging.warning('Relevant ServerName resolution exception: ' + str(e))
                 if SN_IP:
                     logging.debug('SERVER NAME RESOLVED IP: ' + SN_IP)
             # ----- ServerRoot -----
@@ -1238,13 +1552,11 @@ def validate_configs():
                 logging.debug('Validating ServerRoot directive...')
                 if SR.startswith('/'):
                     logging.debug('ABSOLUTE SERVER ROOT: ' + SR)
-                    if not os.path.isdir(SR) and not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: ServerRoot directive specifies potentially non-existent directory "' + SR + '".', C_ORANGE))
-                        logging.warning('ServerRoot directive specifies potentially non-existent directory "' + SR + '".')
+                    if not os.path.isdir(SR):
+                        validation_issue(rel_path, 'ServerRoot directive specifies potentially non-existent directory "' + SR + '".', line_number=(index + 1))
                 else:
                     logging.debug('RELATIVE SERVER ROOT: ' + SR)
-                    printe(_subsubstep('Error: Found relative-path ServerRoot directive. Relative-path ServerRoot directives are not allowed.', C_RED))
-                    logging.critical('Found relative-path ServerRoot directive. Relative-path ServerRoot directives are not allowed.')
+                    validation_issue(rel_path, 'Found relative-path ServerRoot directive. Relative-path ServerRoot directives are not allowed.', line_number=(index + 1), critical=True)
                     send_email(
                         'Relative-path ServerRoot directive found',
                         REL_SERVER_ROOT,
@@ -1257,42 +1569,33 @@ def validate_configs():
                 logging.debug('Validating SSLCACertificateFile directive...')
                 if CA.startswith('/'):
                     logging.debug('ABSOLUTE SSL CA CERT: ' + CA)
-                    if not os.path.isfile(CA) and not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: SSLCACertificateFile directive specifies potentially non-existent file "' + CA + '".', C_ORANGE))
-                        logging.warning('SSLCACertificateFile directive specifies potentially non-existent file "' + CA + '".')
+                    if not os.path.isfile(CA):
+                        validation_issue(rel_path, 'SSLCACertificateFile directive specifies potentially non-existent file "' + CA + '".', line_number=(index + 1))
                 else:
                     logging.debug('RELATIVE SSL CA CERT: ' + CA)
-                    if not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: Found relative-path SSLCACertificateFile directive. Relative-path SSLCACertificateFile directives will not be validated by mkconf.', C_ORANGE))
-                        logging.warning('Found relative-path SSLCACertificateFile directive. Relative-path SSLCACertificateFile directives will not be validated by mkconf.')
+                    validation_issue(rel_path, 'Found relative-path SSLCACertificateFile directive. Relative-path SSLCACertificateFile directives will not be validated by mkconf.', line_number=(index + 1))
             # ----- SSLCertificateFile -----
             CRT = _directive_match(l, 'SSLCertificateFile')
             if CRT:
                 logging.debug('Validating SSLCertificateFile directive...')
                 if CRT.startswith('/'):
                     logging.debug('ABSOLUTE SSL CERT: ' + CRT)
-                    if not os.path.isfile(CRT) and not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: SSLCertificateFile directive specifies potentially non-existent file "' + CRT + '".', C_ORANGE))
-                        logging.warning('SSLCertificateFile directive specifies potentially non-existent file "' + CRT + '".')
+                    if not os.path.isfile(CRT):
+                        validation_issue(rel_path, 'SSLCertificateFile directive specifies potentially non-existent file "' + CRT + '".', line_number=(index + 1))
                 else:
                     logging.debug('RELATIVE SSL CERT: ' + CRT)
-                    if not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: Found relative-path SSLCertificateFile directive. Relative-path SSLCertificateFile directives will not be validated by mkconf.', C_ORANGE))
-                        logging.warning('Found relative-path SSLCertificateFile directive. Relative-path SSLCertificateFile directives will not be validated by mkconf.')
+                    validation_issue(rel_path, 'Found relative-path SSLCertificateFile directive. Relative-path SSLCertificateFile directives will not be validated by mkconf.', line_number=(index + 1))
             # ----- SSLCertificateKeyFile -----
             KEY = _directive_match(l, 'SSLCertificateKeyFile')
             if KEY:
                 logging.debug('Validating SSLCertificateKeyFile directive...')
                 if KEY.startswith('/'):
                     logging.debug('ABSOLUTE SSL KEY: ' + KEY)
-                    if not os.path.isfile(KEY) and not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: SSLCertificateKeyFile directive specifies potentially non-existent file "' + KEY + '".', C_ORANGE))
-                        logging.warning('SSLCertificateKeyFile directive specifies potentially non-existent file "' + KEY + '".')
+                    if not os.path.isfile(KEY):
+                        validation_issue(rel_path, 'SSLCertificateKeyFile directive specifies potentially non-existent file "' + KEY + '".', line_number=(index + 1))
                 else:
                     logging.debug('RELATIVE SSL KEY: ' + KEY)
-                    if not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: Found relative-path SSLCertificateKeyFile directive. Relative-path SSLCertificateKeyFile directives will not be validated by mkconf.', C_ORANGE))
-                        logging.warning('Found relative-path SSLCertificateKeyFile directive. Relative-path SSLCertificateKeyFile directives will not be validated by mkconf.')
+                    validation_issue(rel_path, 'Found relative-path SSLCertificateKeyFile directive. Relative-path SSLCertificateKeyFile directives will not be validated by mkconf.', line_number=(index + 1))
             # ----- TransferLog -----
             TL = _directive_match(l, 'TransferLog')
             if TL:
@@ -1300,15 +1603,18 @@ def validate_configs():
                 if TL.startswith('/'):
                     logging.debug('ABSOLUTE TRANSFER LOG: ' + TL)
                     TLDIR = os.path.dirname(TL)
-                    if not os.path.isdir(TLDIR) and not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: TransferLog directive specifies potentially non-existent parent directory "' + TLDIR + '".', C_ORANGE))
-                        logging.warning('TransferLog directive specifies potentially non-existent parent directory "' + TLDIR + '".')
+                    if not os.path.isdir(TLDIR):
+                        validation_issue(rel_path, 'TransferLog directive specifies potentially non-existent parent directory "' + TLDIR + '".', line_number=(index + 1))
                 else:
                     logging.debug('RELATIVE TRANSFER LOG: ' + TL)
-                    if not args.ignore_validation_warnings:
-                        printe(_subsubstep('Warning: Found relative-path TransferLog directive. Relative-path TransferLog directives will not be validated by mkconf.', C_ORANGE))
-                        logging.warning('Found relative-path TransferLog directive. Relative-path TransferLog directives will not be validated by mkconf.')
-    
+                    validation_issue(rel_path, 'Found relative-path TransferLog directive. Relative-path TransferLog directives will not be validated by mkconf.', line_number=(index + 1))
+    # Send an email with all of the warnings, if there are any.
+    if email_warnings:
+        send_email(
+            'Unable to validate environment',
+            VALIDATION_WARNINGS + email_warnings,
+            'warning'
+        )        
 
 
 def validate_environment():
@@ -1371,14 +1677,49 @@ def validate_environment():
     print(_substep('Validating template configuration file...'))
     logging.debug('Validating template configuration file...')
     if not os.path.isfile(args.template_conf):
-        printe(_subsubstep('Specified template configuration file does not exist.', C_RED))
-        logging.critical('Specified template configuration file does not exist.')
-        send_email(
-            'Unable to validate environment',
-            TEMPLATE_CONF_DOESNT_EXIST,
-            'error'
-        )
-        exit(2)
+        if not os.path.isdir(args.template_conf):
+            printe(_subsubstep('Specified template configuration file does not exist.', C_RED))
+            logging.critical('Specified template configuration file does not exist.')
+            send_email(
+                'Unable to validate environment',
+                TEMPLATE_CONF_DOESNT_EXIST,
+                'error'
+            )
+            exit(2)
+        else:
+            logging.debug('Selecting suitable template configuration file within specified directory...')
+            files = [x for x in os.listdir(args.template_conf) if os.path.isfile(os.path.join(args.template_conf, x))]
+            if not files:
+                printe(_subsubstep('Specified template configuration file directory does not contain any template configuration files.', C_RED))
+                logging.critical('Specified template configuration file directory does not contain any template configuration files.')
+                send_email(
+                    'Unable to validate environment',
+                    TEMPLATE_CONF_DOESNT_EXIST,
+                    'error'
+                )
+                exit(2)
+            elif 'mkconf.yaml' in files:
+                args.template_conf = os.path.join(args.template_conf, 'mkconf.yaml')
+            elif hostname + '.yaml' in files:
+                args.template_conf = os.path.join(args.template_conf, hostname + '.yaml')
+            else:
+                found_match = False
+                for f in files:
+                    if f.rsplit('.', 1)[0] in hostname:
+                        args.template_conf = os.path.join(args.template_conf, f)
+                        found_match = True
+                        break
+                if not found_match:
+                    printe(_subsubstep('Specified template configuration file directory does not contain any selectable template configuration files.', C_RED))
+                    logging.critical('Specified template configuration file directory does not contain any selectable template configuration files.')
+                    send_email(
+                        'Unable to validate environment',
+                        TEMPLATE_CONF_DOESNT_EXIST,
+                        'error'
+                    )
+                    exit(2)
+            printe(_subsubstep('Automatically selected template configuration file "' + args.template_conf + '".', C_BLUE))
+            logging.info('Automatically selected template configuration file "' + args.template_conf + '".')
     print(_substep('Validating working directory...'))
     logging.debug('Validating working directory...')
     if os.path.isfile(args.working_directory):
@@ -1420,7 +1761,8 @@ def validate_environment():
 def write_output():
     '''
     Transfers the newly generated configuration files from the working directory
-    to the specified output directory.
+    to the specified output directory. Also reloads or restarts the Apache Web Server
+    service if specified.
     '''
     if args.dry_run:
         print(_step('Finalizing configuration process (DRY RUN)...'))
@@ -1451,7 +1793,7 @@ def write_output():
                 (b_o, b_ec) = _rsync(
                     args.output.rstrip('/') + '/',
                     args.output.rstrip('/') + '.backup/',
-                    '-a --delete --progress'
+                    '-a -h --delete --progress'
                 )
             except Exception as e:
                 printe(_subsubstep('Unable to create backup - ' + str(e) + '.', C_RED))
@@ -1496,8 +1838,13 @@ def write_output():
             exit(7)
     print(_substep('Writing configuration files to output directory...'))
     logging.info('Writing configuration files to output directory...')
-    rsync_args = '-a --progress'
+    rsync_args = '-a -h --progress'
     if args.delete: rsync_args += ' --delete'
+    rsync_args += ' --exclude logs --exclude modules --exclude run'
+    if args.exclude and args.exclude[0]:
+        for x in args.exclude:
+            rsync_args += ' --exclude ' + x
+    logging.debug('OUTPUT RSYNC ARGS: ' + rsync_args)
     try:
         (w_o, w_ec) = _rsync(
             args.working_directory.rstrip('/') + '/',
@@ -1529,7 +1876,7 @@ def write_output():
     else:
         if w_o:
             for l in w_o:
-                logging.debug('OUTPUT RSYNC OUTPUT: ' + l)
+                logging.debug('OUTPUT RSYNC OUTPUT: ' + l)     
      
 
 # --------------------------------------
